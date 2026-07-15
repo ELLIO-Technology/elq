@@ -1,14 +1,11 @@
 name: Release
 
-# Publishes both packages for a vX.Y.Z tag. Normally invoked by the
-# promote workflow; pushing a tag by hand works too. No registry secrets:
-# npm and PyPI authenticate via OIDC trusted publishing, configured on
-# npmjs.com (@ellio_tech/elq) and pypi.org (ellio-elq) to trust exactly
-# this repository and workflow file.
+# Publishes both packages for a promoted vX.Y.Z tag. Only the promote
+# workflow invokes this: reusable workflows sign with the CALLER's
+# identity, so the npm and PyPI trusted publishers must reference
+# promote.yml, and a hand-pushed tag would fail attestation anyway.
 
 on:
-  push:
-    tags: ["v*"]
   workflow_call:
     inputs:
       version:
@@ -25,11 +22,10 @@ jobs:
     steps:
       - uses: actions/checkout@v4
         with:
-          ref: ${{ inputs.version && format('refs/tags/v{0}', inputs.version) || github.ref }}
+          ref: refs/tags/v${{ inputs.version }}
       - name: Tag must match VERSION
         run: |
-          tag="${{ inputs.version || github.ref_name }}"
-          tag="${tag#v}"
+          tag="${{ inputs.version }}"
           version="$(cat VERSION)"
           if [ "$tag" != "$version" ]; then
             echo "tag v$tag does not match VERSION $version"
@@ -48,7 +44,7 @@ jobs:
     steps:
       - uses: actions/checkout@v4
         with:
-          ref: ${{ inputs.version && format('refs/tags/v{0}', inputs.version) || github.ref }}
+          ref: refs/tags/v${{ inputs.version }}
       - uses: actions/setup-node@v4
         with:
           node-version: 22
@@ -79,7 +75,7 @@ jobs:
     steps:
       - uses: actions/checkout@v4
         with:
-          ref: ${{ inputs.version && format('refs/tags/v{0}', inputs.version) || github.ref }}
+          ref: refs/tags/v${{ inputs.version }}
       - uses: actions/setup-python@v5
         with:
           python-version: "3.12"

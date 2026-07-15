@@ -46,6 +46,7 @@ jobs:
     uses: ./.github/workflows/release.yml
     with:
       version: ${{ needs.promote.outputs.version }}
+    secrets: inherit
     permissions:
       contents: read
       id-token: write
