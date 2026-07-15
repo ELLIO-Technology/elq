@@ -1,3 +1,7 @@
+<p align="center">
+  <img src="https://raw.githubusercontent.com/ELLIO-Technology/elq/main/assets/ellio-logo.svg" alt="ELLIO" height="36">
+</p>
+
 # ellio-elq
 
 Query builder for ELQ, the query language of the ELLIO Search API. Field
@@ -41,6 +45,36 @@ appear exactly where mixed AND/OR precedence requires them. Invalid
 combinations fail early: unsupported operators and non-IP values on the
 `ip` field raise `ValueError`. `raw()` is the escape hatch for query text
 the builder cannot express; it is parenthesized when composed.
+
+
+More of the surface:
+
+```python
+# Time windows, ranges, and comparisons
+f("last_seen").within("7d")                         # last_seen:7d
+f("first_seen").range("2026-06-01", "2026-06-30")   # first_seen:[2026-06-01 TO 2026-06-30]
+f("active_days").gt(30)                             # active_days > 30
+
+# Presence, analysed-text match, wildcards
+f("cve").exists()                                   # cve exists
+f("http.user_agent").match("zgrab")                 # http.user_agent~:"zgrab"
+f("rdns").term("*.censys-scanner.com")              # rdns:"*.censys-scanner.com"
+```
+
+## Query the Search API
+
+The built string goes into the `q` parameter:
+
+```python
+import os
+import requests
+
+res = requests.get(
+    "https://api.ellio.tech/v1/cti/search",
+    params={"q": query},
+    headers={"apikey": os.environ["ELLIO_API_KEY"]},
+)
+```
 
 ## The language
 

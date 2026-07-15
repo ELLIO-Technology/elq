@@ -6,7 +6,7 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "ellio-elq"
-version = "0.1.1"
+version = "0.1.2"
 description = "Query builder for ELQ, the ELLIO Search API query language"
 readme = "README.md"
 requires-python = ">=3.10"

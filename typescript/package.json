@@ -1,6 +1,6 @@
 {
   "name": "@ellio_tech/elq",
-  "version": "0.1.1",
+  "version": "0.1.2",
   "description": "Typed query builder for ELQ, the ELLIO Search API query language",
   "license": "MIT",
   "repository": {

@@ -1,3 +1,7 @@
+<p align="center">
+  <img src="https://raw.githubusercontent.com/ELLIO-Technology/elq/main/assets/ellio-logo.svg" alt="ELLIO" height="36">
+</p>
+
 # ELQ SDKs
 
 Client libraries for ELQ, the query language of the ELLIO Search API:
