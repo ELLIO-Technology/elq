@@ -1,21 +1,30 @@
 name: Promote and release
 
-# Releases happen here: run this workflow (Actions tab, Run workflow) to
-# fast-forward main to the current stage, tag vVERSION, and publish. The
-# ref update API rejects non-fast-forward moves unless force is set, which
-# it never is, so main can only ever be a prior state of stage. The release
-# workflow is invoked directly because tags created with the built-in token
-# do not trigger tag-push workflows.
+# The single release entrypoint: fast-forwards main to stage, tags
+# vVERSION, and publishes both packages from this same workflow file.
+# Keeping the publish jobs inline is load-bearing: with a reusable
+# workflow, the OIDC job_workflow_ref differs from the signing
+# certificate's build config URI, and PyPI checks the trusted publisher
+# against both, so no publisher configuration can satisfy token exchange
+# and attestation verification at once. The npmjs and PyPI trusted
+# publishers reference promote.yml.
+#
+# The ref update API rejects non-fast-forward moves unless force is set,
+# which it never is, so main can only ever be a prior state of stage.
+# Re-running after a failed publish is safe: a tag that already points at
+# the current stage head is reused instead of rejected.
 
 on:
   workflow_dispatch:
 
 permissions:
-  contents: write
+  contents: read
 
 jobs:
   promote:
     runs-on: ubuntu-latest
+    permissions:
+      contents: write
     outputs:
       version: ${{ steps.ff.outputs.version }}
     steps:
@@ -29,8 +38,9 @@ jobs:
         run: |
           stage_sha="$(git rev-parse HEAD)"
           version="$(cat VERSION)"
-          if git ls-remote --exit-code --tags origin "v${version}" >/dev/null 2>&1; then
-            echo "tag v${version} already exists; bump VERSION on stage first"
+          existing="$(git ls-remote --tags origin "refs/tags/v${version}" | cut -f1)"
+          if [ -n "$existing" ] && [ "$existing" != "$stage_sha" ]; then
+            echo "tag v${version} exists at ${existing}, but stage is at ${stage_sha}; bump VERSION on stage first"
             exit 1
           fi
           if gh api "repos/${GITHUB_REPOSITORY}/git/ref/heads/main" >/dev/null 2>&1; then
@@ -38,15 +48,64 @@ jobs:
           else
             gh api -X POST "repos/${GITHUB_REPOSITORY}/git/refs" -f ref="refs/heads/main" -f sha="$stage_sha"
           fi
-          gh api -X POST "repos/${GITHUB_REPOSITORY}/git/refs" -f ref="refs/tags/v${version}" -f sha="$stage_sha"
+          if [ -z "$existing" ]; then
+            gh api -X POST "repos/${GITHUB_REPOSITORY}/git/refs" -f ref="refs/tags/v${version}" -f sha="$stage_sha"
+          else
+            echo "tag v${version} already points at stage; continuing to publish"
+          fi
           echo "version=$version" >> "$GITHUB_OUTPUT"
 
-  release:
+  npm:
     needs: promote
-    uses: ./.github/workflows/release.yml
-    with:
-      version: ${{ needs.promote.outputs.version }}
-    secrets: inherit
+    runs-on: ubuntu-latest
     permissions:
       contents: read
       id-token: write
+    defaults:
+      run:
+        working-directory: typescript
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: refs/tags/v${{ needs.promote.outputs.version }}
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+      - run: npm ci
+      - run: npm run build
+      - run: npm test
+      # npm only allows configuring a trusted publisher on a package that
+      # already exists, so the first release bootstraps with a granular
+      # token in the NPM_TOKEN secret; once the trusted publisher is set on
+      # the package, delete the secret and this publishes via OIDC (which
+      # needs npm 11.5+, newer than what Node 22 bundles).
+      - name: Publish
+        env:
+          NPM_TOKEN: ${{ secrets.NPM_TOKEN }}
+        run: |
+          npm install -g npm@latest
+          if [ -n "$NPM_TOKEN" ]; then
+            npm config set //registry.npmjs.org/:_authToken "$NPM_TOKEN"
+          fi
+          npm publish --provenance --access public
+
+  pypi:
+    needs: promote
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      id-token: write
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: refs/tags/v${{ needs.promote.outputs.version }}
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - run: python -m unittest discover -s tests
+        working-directory: python
+      - run: python -m pip install --quiet build && python -m build
+        working-directory: python
+      - uses: pypa/gh-action-pypi-publish@release/v1
+        with:
+          packages-dir: python/dist/
