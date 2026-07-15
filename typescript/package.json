@@ -3,6 +3,13 @@
   "version": "0.1.1",
   "description": "Typed query builder for ELQ, the ELLIO Search API query language",
   "license": "MIT",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/ELLIO-Technology/elq.git",
+    "directory": "typescript"
+  },
+  "homepage": "https://docs.ellio.tech/threat-intel/elq",
+  "bugs": "https://github.com/ELLIO-Technology/elq/issues",
   "main": "dist/src/index.js",
   "types": "dist/src/index.d.ts",
   "files": [

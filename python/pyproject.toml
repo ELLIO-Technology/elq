@@ -15,3 +15,7 @@ authors = [{ name = "ELLIO Technology" }]
 
 [tool.setuptools]
 packages = ["ellio_elq"]
+
+[project.urls]
+Repository = "https://github.com/ELLIO-Technology/elq"
+Documentation = "https://docs.ellio.tech/threat-intel/elq"
