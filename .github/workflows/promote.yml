@@ -1,0 +1,51 @@
+name: Promote and release
+
+# Releases happen here: run this workflow (Actions tab, Run workflow) to
+# fast-forward main to the current stage, tag vVERSION, and publish. The
+# ref update API rejects non-fast-forward moves unless force is set, which
+# it never is, so main can only ever be a prior state of stage. The release
+# workflow is invoked directly because tags created with the built-in token
+# do not trigger tag-push workflows.
+
+on:
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  promote:
+    runs-on: ubuntu-latest
+    outputs:
+      version: ${{ steps.ff.outputs.version }}
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: stage
+          fetch-depth: 0
+      - id: ff
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          stage_sha="$(git rev-parse HEAD)"
+          version="$(cat VERSION)"
+          if git ls-remote --exit-code --tags origin "v${version}" >/dev/null 2>&1; then
+            echo "tag v${version} already exists; bump VERSION on stage first"
+            exit 1
+          fi
+          if gh api "repos/${GITHUB_REPOSITORY}/git/ref/heads/main" >/dev/null 2>&1; then
+            gh api -X PATCH "repos/${GITHUB_REPOSITORY}/git/refs/heads/main" -f sha="$stage_sha"
+          else
+            gh api -X POST "repos/${GITHUB_REPOSITORY}/git/refs" -f ref="refs/heads/main" -f sha="$stage_sha"
+          fi
+          gh api -X POST "repos/${GITHUB_REPOSITORY}/git/refs" -f ref="refs/tags/v${version}" -f sha="$stage_sha"
+          echo "version=$version" >> "$GITHUB_OUTPUT"
+
+  release:
+    needs: promote
+    uses: ./.github/workflows/release.yml
+    with:
+      version: ${{ needs.promote.outputs.version }}
+    permissions:
+      contents: read
+      id-token: write

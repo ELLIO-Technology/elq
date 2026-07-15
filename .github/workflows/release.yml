@@ -1,0 +1,80 @@
+name: Release
+
+# Publishes both packages for a vX.Y.Z tag. Normally invoked by the
+# promote workflow; pushing a tag by hand works too. No registry secrets:
+# npm and PyPI authenticate via OIDC trusted publishing, configured on
+# npmjs.com (@ellio_tech/elq) and pypi.org (ellio-elq) to trust exactly
+# this repository and workflow file.
+
+on:
+  push:
+    tags: ["v*"]
+  workflow_call:
+    inputs:
+      version:
+        description: Version being released (X.Y.Z, no v prefix)
+        required: true
+        type: string
+
+permissions:
+  contents: read
+
+jobs:
+  verify-version:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ inputs.version && format('refs/tags/v{0}', inputs.version) || github.ref }}
+      - name: Tag must match VERSION
+        run: |
+          tag="${{ inputs.version || github.ref_name }}"
+          tag="${tag#v}"
+          version="$(cat VERSION)"
+          if [ "$tag" != "$version" ]; then
+            echo "tag v$tag does not match VERSION $version"
+            exit 1
+          fi
+
+  npm:
+    needs: verify-version
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      id-token: write
+    defaults:
+      run:
+        working-directory: typescript
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ inputs.version && format('refs/tags/v{0}', inputs.version) || github.ref }}
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          registry-url: https://registry.npmjs.org
+      - run: npm ci
+      - run: npm run build
+      - run: npm test
+      - run: npm publish --provenance --access public
+
+  pypi:
+    needs: verify-version
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      id-token: write
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ inputs.version && format('refs/tags/v{0}', inputs.version) || github.ref }}
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - run: python -m unittest discover -s tests
+        working-directory: python
+      - run: python -m pip install --quiet build && python -m build
+        working-directory: python
+      - uses: pypa/gh-action-pypi-publish@release/v1
+        with:
+          packages-dir: python/dist/
