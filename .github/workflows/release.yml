@@ -52,11 +52,23 @@ jobs:
       - uses: actions/setup-node@v4
         with:
           node-version: 22
-          registry-url: https://registry.npmjs.org
       - run: npm ci
       - run: npm run build
       - run: npm test
-      - run: npm publish --provenance --access public
+      # npm only allows configuring a trusted publisher on a package that
+      # already exists, so the first release bootstraps with a granular
+      # token in the NPM_TOKEN secret; once the trusted publisher is set on
+      # the package, delete the secret and this publishes via OIDC (which
+      # needs npm 11.5+, newer than what Node 22 bundles).
+      - name: Publish
+        env:
+          NPM_TOKEN: ${{ secrets.NPM_TOKEN }}
+        run: |
+          npm install -g npm@latest
+          if [ -n "$NPM_TOKEN" ]; then
+            npm config set //registry.npmjs.org/:_authToken "$NPM_TOKEN"
+          fi
+          npm publish --provenance --access public
 
   pypi:
     needs: verify-version
